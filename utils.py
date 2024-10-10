@@ -26,7 +26,7 @@ def process_audio_files(audio_folder, output_json):
     
     with open(output_json, 'w') as json_file:
         json.dump(data, json_file, indent=4)
-    print(f"Audio vectors saved to {output_json}")
+    print(f"Vector saved: {output_json}")
 
 def match_accent(input_audio, vector_json):
     with open(vector_json, 'r') as f:
@@ -50,7 +50,7 @@ def match_accent(input_audio, vector_json):
 
     return matched_accent, highest_similarity
 
-# process_audio_files('samples', 'accent_vectors.json')
-input_audio_file = 'Test/punjabi.wav'
-matched_accent, similarity_score = match_accent(input_audio_file, 'accent_vectors.json')
-print(f"Matched Accent: {matched_accent} with similarity score: {similarity_score:.4f}")
+process_audio_files('samples', 'accent_vectors.json')
+# input_audio_file = 'Test/punjabi.wav'
+# matched_accent, similarity_score = match_accent(input_audio_file, 'accent_vectors.json')
+# print(f"Matched Accent: {matched_accent} with similarity score: {similarity_score:.4f}")
