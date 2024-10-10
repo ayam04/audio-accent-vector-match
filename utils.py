@@ -18,7 +18,11 @@ def process_audio_files(audio_folder, output_json):
             label = file_name.split("_")[0]
             file_path = os.path.join(audio_folder, file_name)
             vector = extract_features(file_path).tolist()
-            data[label] = vector
+
+            if label in data:
+                data[label].append(vector)
+            else:
+                data[label] = [vector]
     
     with open(output_json, 'w') as json_file:
         json.dump(data, json_file, indent=4)
@@ -34,18 +38,19 @@ def match_accent(input_audio, vector_json):
     highest_similarity = -1
     matched_accent = None
 
-    for accent, vector in accent_vectors.items():
-        vector = np.array(vector)
-        vector = normalize([vector])[0]
-        similarity = 1 - cosine(input_vector, vector)
-        
-        if similarity > highest_similarity:
-            highest_similarity = similarity
-            matched_accent = accent
+    for accent, vectors in accent_vectors.items():
+        for vector in vectors:
+            vector = np.array(vector)
+            vector = normalize([vector])[0]
+            similarity = 1 - cosine(input_vector, vector)
+            
+            if similarity > highest_similarity:
+                highest_similarity = similarity
+                matched_accent = accent
 
     return matched_accent, highest_similarity
 
 # process_audio_files('samples', 'accent_vectors.json')
-input_audio_file = 'Test/kashmiri.wav'
+input_audio_file = 'Test/punjabi.wav'
 matched_accent, similarity_score = match_accent(input_audio_file, 'accent_vectors.json')
 print(f"Matched Accent: {matched_accent} with similarity score: {similarity_score:.4f}")
