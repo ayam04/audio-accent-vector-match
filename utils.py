@@ -1,9 +1,16 @@
 import os
-import json
 import librosa
 import numpy as np
+from pymongo import MongoClient
 from scipy.spatial.distance import cosine
 from sklearn.preprocessing import normalize
+from dotenv import load_dotenv
+
+load_dotenv()
+
+MONGO_URI = os.getenv("MONGO_URI")
+DB_NAME = os.getenv("DB_NAME")
+COLLECTION_NAME = os.getenv("COLLECTION_NAME")
 
 def extract_features(audio_path, n_mfcc=13):
     y, sr = librosa.load(audio_path, sr=None)
@@ -11,46 +18,59 @@ def extract_features(audio_path, n_mfcc=13):
     mfcc_mean = np.mean(mfcc.T, axis=0)
     return mfcc_mean
 
-def process_audio_files(audio_folder, output_json):
-    data = {}
+def process_audio_files(audio_folder):
+    client = MongoClient(MONGO_URI)
+    db = client[DB_NAME]
+    collection = db[COLLECTION_NAME]
+
+    # Drop existing collection and recreate
+    collection.drop()
+    collection.create_index([("accent", 1)])  # Simple index on accent field
+
     for file_name in os.listdir(audio_folder):
         if file_name.endswith(".wav"):
-            label = file_name.split("_")[0]
+            accent = file_name.split(".")[0]  # Remove .wav extension
             file_path = os.path.join(audio_folder, file_name)
             vector = extract_features(file_path).tolist()
 
-            if label in data:
-                data[label].append(vector)
-            else:
-                data[label] = [vector]
-    
-    with open(output_json, 'w') as json_file:
-        json.dump(data, json_file, indent=4)
-    print(f"Vector saved: {output_json}")
+            # Insert document with accent and vector
+            collection.insert_one({
+                "accent": accent,
+                "vector": vector
+            })
 
-def match_accent(input_audio, vector_json):
-    with open(vector_json, 'r') as f:
-        accent_vectors = json.load(f)
+    print(f"Vectors uploaded to MongoDB: {DB_NAME}.{COLLECTION_NAME}")
+    client.close()
+
+def match_accent(input_audio):
+    client = MongoClient(MONGO_URI)
+    db = client[DB_NAME]
+    collection = db[COLLECTION_NAME]
 
     input_vector = extract_features(input_audio)
     input_vector = normalize([input_vector])[0]
 
-    highest_similarity = -1
-    matched_accent = None
+    # Fetch all vectors from the database
+    all_vectors = list(collection.find({}, {"_id": 0, "accent": 1, "vector": 1}))
 
-    for accent, vectors in accent_vectors.items():
-        for vector in vectors:
-            vector = np.array(vector)
-            vector = normalize([vector])[0]
-            similarity = 1 - cosine(input_vector, vector)
-            
-            if similarity > highest_similarity:
-                highest_similarity = similarity
-                matched_accent = accent
+    # Calculate cosine similarity
+    similarities = []
+    for doc in all_vectors:
+        vec = normalize([doc["vector"]])[0]
+        similarity = 1 - cosine(input_vector, vec)
+        similarities.append((doc["accent"], similarity))
 
-    return matched_accent, highest_similarity
+    # Find the best match
+    if similarities:
+        matched_accent, similarity_score = max(similarities, key=lambda x: x[1])
+    else:
+        matched_accent, similarity_score = None, -1
 
-process_audio_files('samples', 'accent_vectors.json')
-# input_audio_file = 'Test/punjabi.wav'
-# matched_accent, similarity_score = match_accent(input_audio_file, 'accent_vectors.json')
-# print(f"Matched Accent: {matched_accent} with similarity score: {similarity_score:.4f}")
+    client.close()
+    return matched_accent, similarity_score
+
+# Usage example:
+# process_audio_files('samples')
+input_audio_file = 'Test/punjabi.wav'
+matched_accent, similarity_score = match_accent(input_audio_file)
+print(f"Matched Accent: {matched_accent} with similarity score: {similarity_score:.4f}")
