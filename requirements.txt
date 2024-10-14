@@ -1,5 +1,5 @@
 librosa
 numpy
 scipy
-sklearn
+scikit-learn
 pymongo
